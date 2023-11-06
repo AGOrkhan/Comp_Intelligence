@@ -3,7 +3,7 @@ import random
 import time
 import pandas as pd
 
-fread = pd.read_csv('ulysses16.csv')
+fread = pd.read_csv('test.csv')
 
 cities = len(fread)
 matrix = np.zeros((cities, cities))
@@ -30,6 +30,7 @@ class Routing:
         self.searches = 0
         self.size = 0
         self.mutation = 0
+        self.greedy_perc = 0
 
 
 rt = Routing()
@@ -41,6 +42,28 @@ def ran_route(population):
         route = list(range(len(rt.matrix)))
         random.shuffle(route)
         route_set.append(route)
+    return route_set
+
+
+def greedy_ran_route(population):
+    route_set = []
+    greedy_count = int(population * rt.greedy_perc)
+
+    for i in range(greedy_count):
+        start_city = random.choice(range(len(rt.matrix)))
+        route = [start_city]
+        while len(route) < len(rt.matrix):
+            last_city = route[-1]
+            next_city = min(range(len(rt.matrix)),
+                            key=lambda j: rt.matrix[last_city][j] if j not in route else float('inf'))
+            route.append(next_city)
+        route_set.append(route)
+
+    for i in range(population - greedy_count):
+        route = list(range(len(rt.matrix)))
+        random.shuffle(route)
+        route_set.append(route)
+
     return route_set
 
 
@@ -101,10 +124,11 @@ def tournament(routes):
     return candidates
 
 
-def initialization(population, counter, size, mutation_rate):
-    routes = ran_route(population)
+def initialization(population, counter, size, mutation_rate, greedy):
+    routes = greedy_ran_route(population)
     rt.size = size
     rt.mutation = mutation_rate
+    rt.greedy_perc = greedy
     start = time.time()
 
     while time.time() - start <= counter:
@@ -113,7 +137,8 @@ def initialization(population, counter, size, mutation_rate):
         routes = crossover(candidates)
 
 
-# Parameters( Population > 1, Time Ran, Tournament size, Mutation rate )
-initialization(50, 3, 2, 0.05)
+# Parameters( Population > 1, Time Ran, Tournament size, Mutation rate, Greedy Percentage)
+initialization(100, 3, 5, 0.08, 0.2)
 print("The final route is:", rt.best_route, "The cost is: ", rt.score, "Search count: ", rt.searches)
+
 
