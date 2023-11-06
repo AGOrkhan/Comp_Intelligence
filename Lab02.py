@@ -112,7 +112,7 @@ def opt_route(route):
 
         route = l_route
 
-    # After finishing all the iterations, update the global best route and score.
+
     rt.score, rt.best_route = (l_score, route) if rt.score > l_score else (rt.score, rt.best_route)
 
 
