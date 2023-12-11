@@ -111,7 +111,6 @@ def opt_route(route):
                     made_improvement = True
 
         route = l_route
-
     rt.score, rt.best_route = (l_score, route) if rt.score > l_score else (rt.score, rt.best_route)
 
 
