@@ -3,7 +3,7 @@ import time
 
 
 class Cutting:
-    def __init__(self, population, timer, mutation_rate, crossover_rate, tournament_size):
+    def __init__(self, population, timer, mutation_rate, tournament_size):
         self.stock_lengths = [10, 13, 15]
         self.stock_costs = [100, 130, 150]
         self.piece_lengths = [3, 4, 5, 6, 7, 8, 9, 10]
@@ -11,8 +11,7 @@ class Cutting:
         self.population = population
         self.timer = timer
         self.mutation_rate = mutation_rate
-        self.crossover_rate = crossover_rate
-        self.tournament_size = tournament_size * 2
+        self.tournament_size = tournament_size
         self.stocks = list(zip(self.stock_lengths, self.stock_costs))
         self.orders = list(zip(self.piece_lengths, self.quantities))
         self.best_cost = float('inf')
@@ -43,7 +42,6 @@ def generate_individual():
 def generate_cutting_plan(stock_length, remaining_orders):
     cutting_plan = []
 
-    # Shuffle the remaining orders
     shuffled_orders = list(remaining_orders.items())
     random.shuffle(shuffled_orders)
 
@@ -59,14 +57,19 @@ def generate_cutting_plan(stock_length, remaining_orders):
 
 def calculate_fitness(individual):
     total_cost = 0
-    total_wastage = 0
+    # total_wastage = 0
 
     for cutting_plan, stock_cost in individual:
         total_cost += stock_cost
-        """used_length = sum(cutting_plan)
-        stock_length = next((i[0] for i in cut.stocks if i[1] == stock_cost))
-        total_wastage += stock_length - used_length"""
-    # print("Solution: ", individual, "Wastage: ", total_wastage, "Cost: ", total_cost)
+
+    cut.solution, cut.best_cost = (individual, total_cost) if cut.best_cost > total_cost else (cut.solution,
+                                                                                                   cut.best_cost)
+
+    # cut.wastage = wastage
+    """used_length = sum(cutting_plan)
+    stock_length = next((i[0] for i in cut.stocks if i[1] == stock_cost))
+    total_wastage += stock_length - used_length"""
+    print("Solution: ", individual, "Cost: ", total_cost)
     return individual, total_cost
 
 
@@ -77,64 +80,63 @@ def tournament_selection(population):
     return parents
 
 
+def crossover(parents):
+    offspring = []
+    for parent1, parent2 in zip(parents[::2], parents[1::2]):
 
-def single_point_crossover(parent1, parent2):
-    crossover_point = random.randint(1, len(parent1) - 1)
-    offspring1 = parent1[:crossover_point] + parent2[crossover_point:]
-    offspring2 = parent2[:crossover_point] + parent1[crossover_point:]
-    return [offspring1, offspring2]
+        midpoint = len(parent1) // 2
+        child1 = parent1[:midpoint] + parent2[midpoint:]
+        child2 = parent2[:midpoint] + parent1[midpoint:]
+
+        offspring.append(adjust_offspring(child1))
+        offspring.append(adjust_offspring(child2))
+
+    return offspring
 
 
-def mutate(individual):
-    if random.random() < cut.mutation_rate:
-        mutation_point = random.randint(0, len(individual) - 1)
+def adjust_offspring(offspring):
+    required_quantities = dict(cut.orders)
+    current_quantities = {length: 0 for length, _ in cut.orders}
 
-        # Correctly identify the stock length for the mutation point
-        stock_length = individual[mutation_point][0]
-        stock_length = stock_length[0]
+    for cutting_plan, _ in offspring:
+        for length in cutting_plan:
+            current_quantities[length] += 1
 
-        new_cutting_plan, _ = generate_cutting_plan(stock_length, dict(cut.orders))
-        individual[mutation_point] = (new_cutting_plan, individual[mutation_point][1])
-
-    return individual
-
+    for cutting_plan, stock_cost in offspring:
+        for i, length in enumerate(cutting_plan):
+            if current_quantities[length] > required_quantities[length]:
+                for replacement_length, qty in current_quantities.items():
+                    if qty < required_quantities[replacement_length] and replacement_length <= length:
+                        cutting_plan[i] = replacement_length
+                        current_quantities[length] -= 1
+                        current_quantities[replacement_length] += 1
+                        break
+    return offspring
 
 
 def evolution():
     population = initialize_population()
     start_time = time.time()
-
     while time.time() - start_time < cut.timer:
-        new_population = []
-
-        while len(new_population) < cut.population:
-            # Selection
-            parent1 = tournament_selection(population)
-            parent2 = tournament_selection(population)
-
-            # Crossover
-            offspring1, offspring2 = single_point_crossover(parent1, parent2)
-
-            # Mutation
-            offspring1 = mutate(offspring1)
-            offspring2 = mutate(offspring2)
-
-            # Add offspring to the new population
-            new_population.extend([offspring1, offspring2])
-
-        # Ensure the population size is constant
-        population = new_population[:cut.population]
-
-        # Update the best solution
-        for individual in population:
-            cost, wastage = calculate_fitness(individual)
-            if cost < cut.best_cost:
-                cut.best_cost = cost
-                cut.solution = individual
-                cut.wastage = wastage
+        population = crossover(tournament_selection(population))
 
 
-cut = Cutting(1000, 3, 0.01, 0.9, 2)
+cut = Cutting(1000, 2, 0.01, 10)
 evolution()
 # print("Best solution: ", cut.solution, "Wastage: ", cut.wastage, "Cost: ", cut.best_cost)
-# print("Best solution: ", cut.solution, "Cost: ", cut.best_cost)
+
+
+# Assuming cut.solution is set
+def count_lengths_in_solution(solution):
+    length_usage = {}
+
+    for cutting_plan, _ in solution:
+        for length in cutting_plan:
+            if length in length_usage:
+                length_usage[length] += 1
+            else:
+                length_usage[length] = 1
+
+    return length_usage
+
+print("Best solution: ", cut.solution, "Cost: ", cut.best_cost)
