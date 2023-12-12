@@ -3,11 +3,12 @@ import time
 
 
 class Cutting:
-    def __init__(self, population, timer, mutation_rate, tournament_size):
+    def __init__(self, population, timer, mutation_rate, tournament_size, penalty):
         self.stock_lengths = [10, 13, 15]
         self.stock_costs = [100, 130, 150]
         self.piece_lengths = [3, 4, 5, 6, 7, 8, 9, 10]
         self.quantities = [5, 2, 1, 2, 4, 2, 1, 3]
+
         self.population = population
         self.timer = timer
         self.mutation_rate = mutation_rate
@@ -15,8 +16,10 @@ class Cutting:
         self.stocks = list(zip(self.stock_lengths, self.stock_costs))
         self.orders = list(zip(self.piece_lengths, self.quantities))
         self.best_cost = float('inf')
+
         self.solution = []
         self.wastage = 0
+        self.penalty = penalty
 
 
 def initialize_population():
@@ -41,7 +44,6 @@ def generate_individual():
 
 def generate_cutting_plan(stock_length, remaining_orders):
     cutting_plan = []
-
     shuffled_orders = list(remaining_orders.items())
     random.shuffle(shuffled_orders)
 
@@ -57,25 +59,36 @@ def generate_cutting_plan(stock_length, remaining_orders):
 
 def calculate_fitness(individual):
     total_cost = 0
-    # total_wastage = 0
+    penalty = 0
+    piece_usage = {length: 0 for length, _ in cut.orders}
 
     for cutting_plan, stock_cost in individual:
         total_cost += stock_cost
+        total_length = sum(cutting_plan)
+        stock_length = next((length for length, cost in cut.stocks if cost == stock_cost), None)
 
+        if total_length > stock_length:
+
+            penalty += (total_length - stock_length) * cut.penalty
+
+        for piece_length in cutting_plan:
+            piece_usage[piece_length] += 1
+
+    for piece_length, quantities in cut.orders:
+        deviation = abs(piece_usage[piece_length] - quantities)
+        penalty += deviation * cut.penalty
+
+    total_cost += penalty
     cut.solution, cut.best_cost = (individual, total_cost) if cut.best_cost > total_cost else (cut.solution,
-                                                                                                   cut.best_cost)
+                                                                                               cut.best_cost)
 
-    # cut.wastage = wastage
-    """used_length = sum(cutting_plan)
-    stock_length = next((i[0] for i in cut.stocks if i[1] == stock_cost))
-    total_wastage += stock_length - used_length"""
-    print("Solution: ", individual, "Cost: ", total_cost)
+    # print("Cost: ", total_cost)
     return individual, total_cost
 
 
 def tournament_selection(population):
     parents = []
-    for _ in range(cut.tournament_size):
+    while len(parents) < cut.tournament_size:
         parents.append(min(random.sample(population, cut.tournament_size), key=calculate_fitness))
     return parents
 
@@ -84,34 +97,36 @@ def crossover(parents):
     offspring = []
     for parent1, parent2 in zip(parents[::2], parents[1::2]):
 
-        midpoint = len(parent1) // 2
-        child1 = parent1[:midpoint] + parent2[midpoint:]
-        child2 = parent2[:midpoint] + parent1[midpoint:]
+        chunk_size = random.randint(1, min(len(parent1), len(parent2)) // 2)
+        start_point = random.randint(0, len(parent1) - chunk_size)
 
-        offspring.append(adjust_offspring(child1))
-        offspring.append(adjust_offspring(child2))
+        offspring.append(parent1[:start_point] + parent2[start_point:start_point + chunk_size] + parent1[start_point +
+                                                                                                         chunk_size:])
+        offspring.append(parent2[:start_point] + parent1[start_point:start_point + chunk_size] + parent2[start_point +
+                                                                                                         chunk_size:])
+        mutator = random.choice(offspring)
+        if random.random() < cut.mutation_rate:
+            offspring[offspring.index(mutator)] = mutate(mutator)
 
     return offspring
 
 
-def adjust_offspring(offspring):
-    required_quantities = dict(cut.orders)
-    current_quantities = {length: 0 for length, _ in cut.orders}
+def mutate(individual):
+    cutting_plan_index = random.randint(0, len(individual) - 1)
+    cutting_plan, stock_cost = individual[cutting_plan_index]
 
-    for cutting_plan, _ in offspring:
-        for length in cutting_plan:
-            current_quantities[length] += 1
+    stock_length = next((length for length, cost in cut.stocks if cost == stock_cost), None)
 
-    for cutting_plan, stock_cost in offspring:
-        for i, length in enumerate(cutting_plan):
-            if current_quantities[length] > required_quantities[length]:
-                for replacement_length, qty in current_quantities.items():
-                    if qty < required_quantities[replacement_length] and replacement_length <= length:
-                        cutting_plan[i] = replacement_length
-                        current_quantities[length] -= 1
-                        current_quantities[replacement_length] += 1
-                        break
-    return offspring
+    if len(cutting_plan) > 1:
+        i, j = random.sample(range(len(cutting_plan)), 2)
+        cutting_plan[i], cutting_plan[j] = cutting_plan[j], cutting_plan[i]
+
+    if sum(cutting_plan) > stock_length:
+        cutting_plan.pop()
+
+    individual[cutting_plan_index] = (cutting_plan, stock_cost)
+
+    return individual
 
 
 def evolution():
@@ -121,22 +136,8 @@ def evolution():
         population = crossover(tournament_selection(population))
 
 
-cut = Cutting(1000, 2, 0.01, 10)
+cut = Cutting(1000, 10, 1, 500, 10)
 evolution()
 # print("Best solution: ", cut.solution, "Wastage: ", cut.wastage, "Cost: ", cut.best_cost)
-
-
-# Assuming cut.solution is set
-def count_lengths_in_solution(solution):
-    length_usage = {}
-
-    for cutting_plan, _ in solution:
-        for length in cutting_plan:
-            if length in length_usage:
-                length_usage[length] += 1
-            else:
-                length_usage[length] = 1
-
-    return length_usage
-
+# print("Best solution: ", cut.solution, "Cost: ", cut.best_cost)
 print("Best solution: ", cut.solution, "Cost: ", cut.best_cost)

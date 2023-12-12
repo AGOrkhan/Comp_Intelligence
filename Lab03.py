@@ -116,6 +116,7 @@ def crossover(candidates):
 
 def tournament(routes):
     candidates = []
+
     for i in range(len(routes) * 2):
         values = list(map(route_calc, random.sample(routes, rt.size)))
         route = list([route[0] for route in values])
@@ -133,8 +134,10 @@ def initialization(population, counter, size, mutation_rate, greedy):
 
     while time.time() - start <= counter:
         rt.searches += 1
-        candidates = tournament(routes)
-        routes = crossover(candidates)
+        # candidates = tournament(routes)
+        # routes = crossover(candidates)
+
+        routes = crossover(tournament(routes))
 
 
 # Parameters( Population > 1, Time Ran, Tournament size, Mutation rate, Greedy Percentage)
