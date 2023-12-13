@@ -1,25 +1,30 @@
 import random
 import time
+import matplotlib.pyplot as matlib
+import concurrent.futures
 
 
 class Cutting:
-    def __init__(self, population, timer, mutation_rate, tournament_size, penalty):
-        self.stock_lengths = [10, 13, 15]
-        self.stock_costs = [100, 130, 150]
-        self.piece_lengths = [3, 4, 5, 6, 7, 8, 9, 10]
-        self.quantities = [5, 2, 1, 2, 4, 2, 1, 3]
+    def __init__(self, population, timer, mutation_rate, tournament_size, mutation, niche_size, penalty_multiplier):
+        self.stock_lengths = [4300, 4250, 4150, 3950, 3800, 3700, 3550, 3500]
+        self.stock_costs = [86, 85, 83, 79, 68, 66, 64, 63]
+        self.piece_lengths = [2350, 2250, 2200, 2100, 2050, 2000, 1950, 1900, 1850, 1700, 1650, 1350, 1300, 1250, 1200, 1150, 1100, 1050]
+        self.quantities = [2, 4, 4, 15, 6, 11, 6, 15, 13, 5, 2, 9, 3, 6, 10, 4, 8, 3]
 
-        self.population = population
+        self.population = population * niche_size
         self.timer = timer
         self.mutation_rate = mutation_rate
         self.tournament_size = tournament_size
+        self.mutation_scale = mutation
+        self.niche_size = niche_size
+        self.penalty_multiplier = penalty_multiplier
+        self.generations = 0
+
         self.stocks = list(zip(self.stock_lengths, self.stock_costs))
         self.orders = list(zip(self.piece_lengths, self.quantities))
-        self.best_cost = float('inf')
 
+        self.best_cost = float('inf')
         self.solution = []
-        self.wastage = 0
-        self.penalty = penalty
 
 
 def initialize_population():
@@ -31,14 +36,16 @@ def initialize_population():
 
 
 def generate_individual():
-    individual = []
+    individual = {
+        'stock_details': [],
+        'total_cost': float('inf')
+    }
     remaining_orders = dict(cut.orders)
 
     while any(qty > 0 for qty in remaining_orders.values()):
         selected_stock, stock_cost = random.choice(cut.stocks)
         cutting_plan, remaining_orders = generate_cutting_plan(selected_stock, remaining_orders)
-        individual.append((cutting_plan, stock_cost))
-
+        individual['stock_details'].append((selected_stock, cutting_plan, stock_cost))
     return individual
 
 
@@ -62,82 +69,123 @@ def calculate_fitness(individual):
     penalty = 0
     piece_usage = {length: 0 for length, _ in cut.orders}
 
-    for cutting_plan, stock_cost in individual:
+    for stock_length, cutting_plan, stock_cost in individual['stock_details']:
         total_cost += stock_cost
-        total_length = sum(cutting_plan)
-        stock_length = next((length for length, cost in cut.stocks if cost == stock_cost), None)
 
-        if total_length > stock_length:
-
-            penalty += (total_length - stock_length) * cut.penalty
+        if sum(cutting_plan) > stock_length:
+            penalty += (sum(cutting_plan) - stock_length) * cut.penalty_multiplier
 
         for piece_length in cutting_plan:
             piece_usage[piece_length] += 1
 
     for piece_length, quantities in cut.orders:
         deviation = abs(piece_usage[piece_length] - quantities)
-        penalty += deviation * cut.penalty
+        penalty += deviation * cut.penalty_multiplier
 
     total_cost += penalty
-    cut.solution, cut.best_cost = (individual, total_cost) if cut.best_cost > total_cost else (cut.solution,
-                                                                                               cut.best_cost)
+    individual['total_cost'] = total_cost
 
-    # print("Cost: ", total_cost)
-    return individual, total_cost
+    cut.solution, cut.best_cost = (individual, total_cost) if cut.best_cost > total_cost else (
+        cut.solution, cut.best_cost)
 
 
 def tournament_selection(population):
     parents = []
     while len(parents) < cut.tournament_size:
-        parents.append(min(random.sample(population, cut.tournament_size), key=calculate_fitness))
+        parents.append(min(random.sample(population, cut.tournament_size),
+                           key=lambda individual: individual['total_cost']))
     return parents
 
 
 def crossover(parents):
     offspring = []
-    for parent1, parent2 in zip(parents[::2], parents[1::2]):
+    for parent1dict, parent2dict in zip(parents[::2], parents[1::2]):
+        parent1 = parent1dict['stock_details']
+        parent2 = parent2dict['stock_details']
 
         chunk_size = random.randint(1, min(len(parent1), len(parent2)) // 2)
         start_point = random.randint(0, len(parent1) - chunk_size)
 
-        offspring.append(parent1[:start_point] + parent2[start_point:start_point + chunk_size] + parent1[start_point +
-                                                                                                         chunk_size:])
-        offspring.append(parent2[:start_point] + parent1[start_point:start_point + chunk_size] + parent2[start_point +
-                                                                                                         chunk_size:])
-        mutator = random.choice(offspring)
-        if random.random() < cut.mutation_rate:
-            offspring[offspring.index(mutator)] = mutate(mutator)
+        offspring_chunk1 = (parent1[:start_point] + parent2[start_point:start_point + chunk_size]
+                            + parent1[start_point + chunk_size:])
+        offspring_chunk2 = (parent2[:start_point] + parent1[start_point:start_point + chunk_size]
+                            + parent2[start_point + chunk_size:])
+
+        offspring1 = {'stock_details': offspring_chunk1, 'total_cost': float('inf')}
+        offspring2 = {'stock_details': offspring_chunk2, 'total_cost': float('inf')}
+
+        offspring.append(offspring1)
+        offspring.append(offspring2)
+
+        for individual in offspring:
+            if random.random() < cut.mutation_rate:
+                mutate(individual)
 
     return offspring
 
 
 def mutate(individual):
     cutting_plan_index = random.randint(0, len(individual) - 1)
-    cutting_plan, stock_cost = individual[cutting_plan_index]
+    stock_length, cutting_plan, stock_cost = individual['stock_details'][cutting_plan_index]
 
-    stock_length = next((length for length, cost in cut.stocks if cost == stock_cost), None)
-
-    if len(cutting_plan) > 1:
-        i, j = random.sample(range(len(cutting_plan)), 2)
-        cutting_plan[i], cutting_plan[j] = cutting_plan[j], cutting_plan[i]
+    for _ in range(cut.mutation_scale):
+        if len(cutting_plan) > 1:
+            i, j = random.sample(range(len(cutting_plan)), 2)
+            cutting_plan[i], cutting_plan[j] = cutting_plan[j], cutting_plan[i]
 
     if sum(cutting_plan) > stock_length:
         cutting_plan.pop()
 
-    individual[cutting_plan_index] = (cutting_plan, stock_cost)
-
+    individual['stock_details'][cutting_plan_index] = (stock_length, cutting_plan, stock_cost)
     return individual
 
 
+def dividing(population):
+    population.sort(key=lambda individual: individual['total_cost'])
+
+    # Divide into niches
+    niches = []
+    niche_size = len(population) // cut.niche_size
+    for i in range(cut.niche_size):
+        niche = population[i * niche_size:(i + 1) * niche_size]
+        niches.append(niche)
+
+    return niches
+
+    # niche_size = len(population) // cut.niche_size
+    #
+    # niches = []
+    # for _ in range(cut.niche_size):
+    #     niche = random.sample(population, niche_size)
+    #     niches.append(niche)
+    # return niches
+
+
 def evolution():
+    # Reset if necessary
+    cut.best_cost = float('inf')
+    cut.solution = []
+    cut.generations = 0
+
+    # Evolutionary algorithm
     population = initialize_population()
     start_time = time.time()
-    while time.time() - start_time < cut.timer:
-        population = crossover(tournament_selection(population))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=cut.niche_size) as executor:
+        while time.time() - start_time < cut.timer:
+            processes = []
+            new_pop = []
+            cut.generations += 1
+            [calculate_fitness(individual) for individual in population]
+            for niche in dividing(population):
+                process = executor.submit(crossover, tournament_selection(niche))
+                processes.append(process)
+
+            for future in concurrent.futures.as_completed(processes):
+                child = process.result()
+                new_pop.extend(child)
+
+            population = new_pop
 
 
-cut = Cutting(1000, 10, 1, 500, 10)
+cut = Cutting(200, 10, 0.1, 50, 3, 3, 100)
 evolution()
-# print("Best solution: ", cut.solution, "Wastage: ", cut.wastage, "Cost: ", cut.best_cost)
-# print("Best solution: ", cut.solution, "Cost: ", cut.best_cost)
-print("Best solution: ", cut.solution, "Cost: ", cut.best_cost)

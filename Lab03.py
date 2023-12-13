@@ -141,7 +141,7 @@ def initialization(population, counter, size, mutation_rate, greedy):
 
 
 # Parameters( Population > 1, Time Ran, Tournament size, Mutation rate, Greedy Percentage)
-initialization(100, 3, 5, 0.08, 0.2)
+initialization(2, 3, 2, 0.08, 0.2)
 print("The final route is:", rt.best_route, "The cost is: ", rt.score, "Search count: ", rt.searches)
 
 
