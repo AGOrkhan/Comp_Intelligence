@@ -1,24 +1,22 @@
 import random
 import time
-import matplotlib.pyplot as matlib
 import concurrent.futures
 
 
 class Cutting:
-    def __init__(self, population, timer, mutation_rate, tournament_size, mutation, niche_size, penalty_multiplier):
-        self.stock_lengths = [4300, 4250, 4150, 3950, 3800, 3700, 3550, 3500]
-        self.stock_costs = [86, 85, 83, 79, 68, 66, 64, 63]
-        self.piece_lengths = [2350, 2250, 2200, 2100, 2050, 2000, 1950, 1900, 1850, 1700, 1650, 1350, 1300, 1250, 1200, 1150, 1100, 1050]
-        self.quantities = [2, 4, 4, 15, 6, 11, 6, 15, 13, 5, 2, 9, 3, 6, 10, 4, 8, 3]
+    def __init__(self, population, generations, mutation_rate, tournament_size, mutation_scale, niche_size, penalty_multiplier):
+        self.stock_lengths = [10, 13, 15]
+        self.stock_costs = [100, 130, 150]
+        self.piece_lengths = [3, 4, 5, 6, 7, 8, 9, 10]
+        self.quantities = [5, 2, 1, 2, 4, 2, 1, 3]
 
         self.population = population * niche_size
-        self.timer = timer
+        self.generation = generations
         self.mutation_rate = mutation_rate
         self.tournament_size = tournament_size
-        self.mutation_scale = mutation
+        self.mutation_scale = mutation_scale
         self.niche_size = niche_size
         self.penalty_multiplier = penalty_multiplier
-        self.generations = 0
 
         self.stocks = list(zip(self.stock_lengths, self.stock_costs))
         self.orders = list(zip(self.piece_lengths, self.quantities))
@@ -165,27 +163,27 @@ def evolution():
     # Reset if necessary
     cut.best_cost = float('inf')
     cut.solution = []
-    cut.generations = 0
 
     # Evolutionary algorithm
     population = initialize_population()
     start_time = time.time()
     with concurrent.futures.ThreadPoolExecutor(max_workers=cut.niche_size) as executor:
-        while time.time() - start_time < cut.timer:
+        for _ in range(cut.generation):
             processes = []
             new_pop = []
-            cut.generations += 1
+
             [calculate_fitness(individual) for individual in population]
             for niche in dividing(population):
                 process = executor.submit(crossover, tournament_selection(niche))
                 processes.append(process)
 
-            for future in concurrent.futures.as_completed(processes):
+            for process in concurrent.futures.as_completed(processes):
                 child = process.result()
                 new_pop.extend(child)
 
             population = new_pop
 
 
-cut = Cutting(200, 10, 0.1, 50, 3, 3, 100)
+cut = Cutting(1000, 6, 0.1, 4, 4, 3, 100)
 evolution()
+print("Best solution: ", cut.solution, "Cost: ", cut.best_cost)
